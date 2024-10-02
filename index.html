@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AG Project Leaderboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #333;
+            color: white;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        /* Added extra padding below the table to accommodate the floating component */
+        .table-container {
+            padding-bottom: 100px; /* Adjust this value as needed */
+        }
+        footer {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            background-color: #007bff;
+            border-radius: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 14px;
+            text-align: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 1000; /* Ensure it's always on top */
+            padding: 10px 20px;
+            height: auto;
+            width: auto;
+        }
+        footer a {
+            color: white;
+            text-decoration: none;
+        }
+        footer:hover {
+            background-color: #0056b3;
+        }
+        .darken {
+            background-color: yellow;
+        }
+        #toast {
+            visibility: hidden;
+            min-width: 250px;
+            margin-left: -125px;
+            background-color: #333;
+            color: white;
+            text-align: center;
+            border-radius: 2px;
+            padding: 16px;
+            position: fixed;
+            z-index: 1;
+            left: 50%;
+            bottom: 30px;
+            font-size: 17px;
+        }
+        #toast.show {
+            visibility: visible;
+            animation: fadein 0.5s, fadeout 0.5s 2.5s;
+        }
+        @keyframes fadein {
+            from {bottom: 0; opacity: 0;}
+            to {bottom: 30px; opacity: 1;}
+        }
+        @keyframes fadeout {
+            from {bottom: 30px; opacity: 1;}
+            to {bottom: 0; opacity: 0;}
+        }
+    </style>
+</head>
+<body>
+
+    <h1>AG Project Leaderboard</h1>
+
+    <label>
+        <input type="checkbox" id="toggle-zero-points"> Display accounts with 0 points
+    </label>
+    
+    <br><br>
+    
+    <input type="text" id="wallet-search" placeholder="Enter wallet address" style="width: 100%; padding: 10px; font-size: 16px;">
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Wallet Address</th>
+                    <th>Total Points</th>
+                </tr>
+            </thead>
+            <tbody id="leaderboard-body">
+                <!-- Leaderboard data will be inserted here -->
+            </tbody>
+        </table>
+    </div>
+
+    <footer>
+        <a href="https://chainlabs.in" target="_blank" rel="noopener noreferrer">Created with ❤️ by Chain Labs</a>
+    </footer>
+
+    <div id="toast">Wallet not found</div>
+
+    <script>
+        // API URL to fetch leaderboard data
+        const API_URL = 'https://ag-api.simplrhq.com/api/all-time-leaderboard';
+
+        let leaderboardData = []; // Store leaderboard data for easy access
+        let showZeroPoints = false; // Toggle state
+        let searchTimeout; // Timeout for debounce
+
+        // Function to fetch leaderboard data
+        async function fetchLeaderboard() {
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+
+                // Sort the data by rank
+                leaderboardData = data.sort((a, b) => a.rank - b.rank);
+
+                renderLeaderboard();
+            } catch (error) {
+                console.error('Error fetching leaderboard data:', error);
+            }
+        }
+
+        // Function to render leaderboard data
+        function renderLeaderboard() {
+            const leaderboardBody = document.getElementById('leaderboard-body');
+            leaderboardBody.innerHTML = ''; // Clear existing data
+
+            leaderboardData.forEach((entry) => {
+                // Check if totalPoints is 0 and the toggle is off, skip the entry if true
+                if (entry.totalPoints === 0 && !showZeroPoints) {
+                    return;
+                }
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${entry.rank}</td>
+                    <td>${getCompressedWallet(entry.walletAddress)}</td>
+                    <td>${entry.totalPoints.toFixed(2)}</td>
+                `;
+                row.setAttribute('data-wallet', entry.walletAddress);
+                leaderboardBody.appendChild(row);
+            });
+        }
+
+        // Function to compress wallet address for smaller screens
+        function getCompressedWallet(walletAddress) {
+            if (window.innerWidth < 768) {
+                return walletAddress.slice(0, 6) + '...' + walletAddress.slice(-4);
+            }
+            return walletAddress;
+        }
+
+        // Debounced Search for a specific wallet address
+        document.getElementById('wallet-search').addEventListener('input', function () {
+            clearTimeout(searchTimeout); // Clear previous timeout
+
+            searchTimeout = setTimeout(() => {
+                const walletInput = this.value.toLowerCase();
+                const rows = document.querySelectorAll('#leaderboard-body tr');
+
+                let walletFound = false;
+
+                rows.forEach(row => {
+                    row.classList.remove('darken'); // Remove highlight from all rows
+                    const walletAddress = row.getAttribute('data-wallet').toLowerCase();
+                    if (walletAddress === walletInput) {
+                        walletFound = true;
+                        row.classList.add('darken'); // Highlight the matching row
+                        row.scrollIntoView({ behavior: 'smooth', block: 'center' }); // Scroll to the row
+                    }
+                });
+
+                if (!walletFound && walletInput) {
+                    showToast("Wallet not found");
+                }
+            }, 500); // 0.5 second delay
+        });
+
+        // Toast message for wallet not found
+        function showToast(message) {
+            const toast = document.getElementById("toast");
+            toast.innerText = message;
+            toast.className = "show";
+            setTimeout(() => {
+                toast.className = toast.className.replace("show", "");
+            }, 3000);
+        }
+
+        // Toggle event listener
+        document.getElementById('toggle-zero-points').addEventListener('change', function() {
+            showZeroPoints = this.checked;
+            renderLeaderboard();
+        });
+
+        // Fetch leaderboard data when the page loads
+        fetchLeaderboard();
+
+        // Handle window resize for wallet address compression
+        window.addEventListener('resize', renderLeaderboard);
+    </script>
+
+</body>
+</html>
